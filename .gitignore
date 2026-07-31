@@ -1,0 +1,31 @@
+.env
+.env.*
+!.env.example
+!.env.production.example
+ewallet-backend.env
+ewallet-bakend.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+backend/target/
+frontend/dist/
+frontend/node_modules/
+*.log
+database/rds/*_local.sql
+
+# Báo cáo cá nhân - chỉ giữ mục 2 và mục 5 trên Git
+report/fcj-workshop-template-main/content/1-Worklog/
+report/fcj-workshop-template-main/content/3-BlogsPosted/
+report/fcj-workshop-template-main/content/4-EventParticipated/
+report/fcj-workshop-template-main/content/6-Self-evaluation/
+report/fcj-workshop-template-main/content/7-Feedback/
+
+# Hai trang thông tin chung có dữ liệu cá nhân
+report/fcj-workshop-template-main/content/_index.md
+report/fcj-workshop-template-main/content/_index.vi.md
+
+# Ảnh đại diện cá nhân
+report/fcj-workshop-template-main/static/images/avatar.png
+report/fcj-workshop-template-main/static/images/avatar.jpg
