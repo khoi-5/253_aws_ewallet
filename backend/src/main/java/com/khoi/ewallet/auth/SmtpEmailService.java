@@ -28,7 +28,9 @@ public class SmtpEmailService implements EmailService {
     public void sendPasswordResetEmail(String email, String resetUrl) {
         send(email, "Reset your Cloud E-Wallet password",
                 "Reset your password by opening this link:\n\n" + resetUrl
-                        + "\n\nIf you did not request a password reset, you can ignore this email.");
+                        + "\n\nIf you did not request a password reset, you can ignore this email."
+                        + "\n\nIf you suspect that your account has been compromised, please contact "
+                        + "tranminhkhoichaua5@gmail.com.");
     }
 
     private void send(String recipient, String subject, String body) {
