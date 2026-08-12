@@ -56,3 +56,69 @@ jobs:
         run: >-
           docker push
           "${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}"
+
+      - name: Prepare EC2 User Data
+        id: user-data
+        env:
+          DEPLOY_REGION: ${{ vars.AWS_REGION }}
+          ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cat > "$RUNNER_TEMP/user-data.sh" <<EOF
+          #!/bin/bash
+          set -euo pipefail
+
+          aws ecr get-login-password --region "${DEPLOY_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+          docker pull "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker rm --force ewallet-backend 2>/dev/null || true
+          docker run --detach \
+            --name ewallet-backend \
+            --restart unless-stopped \
+            --publish 8080:8080 \
+            --env-file /home/ec2-user/ewallet-backend.env \
+            "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          EOF
+
+          user_data_base64="$(base64 --wrap=0 "$RUNNER_TEMP/user-data.sh")"
+          echo "base64=$user_data_base64" >> "$GITHUB_OUTPUT"
+
+      - name: Read Launch Template version from Auto Scaling Group
+        id: asg-launch-template
+        env:
+          AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+        run: |
+          source_version="$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "$AUTO_SCALING_GROUP" \
+            --query 'AutoScalingGroups[0].LaunchTemplate.Version' \
+            --output text)"
+
+          echo "source_version=$source_version" >> "$GITHUB_OUTPUT"
+
+      - name: Create Launch Template version
+        id: create-launch-template-version
+        env:
+          USER_DATA_BASE64: ${{ steps.user-data.outputs.base64 }}
+          LAUNCH_TEMPLATE_ID: ${{ vars.LAUNCH_TEMPLATE_ID }}
+          SOURCE_VERSION: ${{ steps.asg-launch-template.outputs.source_version }}
+          VERSION_DESCRIPTION: CI deploy ${{ github.sha }}
+        run: |
+          launch_template_data="$(jq --compact-output --null-input \
+            --arg userData "$USER_DATA_BASE64" \
+            '{UserData: $userData}')"
+
+          version_number="$(aws ec2 create-launch-template-version \
+            --launch-template-id "$LAUNCH_TEMPLATE_ID" \
+            --source-version "$SOURCE_VERSION" \
+            --version-description "$VERSION_DESCRIPTION" \
+            --launch-template-data "$launch_template_data" \
+            --query 'LaunchTemplateVersion.VersionNumber' \
+            --output text)"
+
+          echo "version_number=$version_number" >> "$GITHUB_OUTPUT"
+
+      - name: Report Launch Template version
+        env:
+          VERSION_NUMBER: ${{ steps.create-launch-template-version.outputs.version_number }}
+        run: |
+          echo "Created launch template version: ${VERSION_NUMBER}"
