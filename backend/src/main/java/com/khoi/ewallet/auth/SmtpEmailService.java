@@ -35,8 +35,8 @@ public class SmtpEmailService implements EmailService {
 
     @Override
     public void sendPasswordResetEmail(String email, String resetUrl) {
-        String subject = "[Cloud E-Wallet] Password Reset Request";
-        
+        String subject = "Reset your Cloud E-Wallet password";
+
         String body = "Hello,\n\n"
                 + "We received a request to reset the password for your Cloud E-Wallet account.\n\n"
                 + "Please click the link below to set a new password:\n"
