@@ -24,13 +24,29 @@ public class SmtpEmailService implements EmailService {
                         + "\n\nIf you did not create this account, you can ignore this email.");
     }
 
+    // @Override
+    // public void sendPasswordResetEmail(String email, String resetUrl) {
+    //     send(email, "Reset your Cloud E-Wallet password",
+    //             "Reset your password by opening this link:\n\n" + resetUrl
+    //                     + "\n\nIf you did not request a password reset, you can ignore this email."
+    //                     + "\n\nIf you suspect that your account has been compromised, please contact "
+    //                     + "tranminhkhoichaua5@gmail.com.");
+    // }
+
     @Override
     public void sendPasswordResetEmail(String email, String resetUrl) {
-        send(email, "Reset your Cloud E-Wallet password",
-                "Reset your password by opening this link:\n\n" + resetUrl
-                        + "\n\nIf you did not request a password reset, you can ignore this email."
-                        + "\n\nIf you suspect that your account has been compromised, please contact "
-                        + "tranminhkhoichaua5@gmail.com.");
+        String subject = "[Cloud E-Wallet] Password Reset Request";
+        
+        String body = "Hello,\n\n"
+                + "We received a request to reset the password for your Cloud E-Wallet account.\n\n"
+                + "Please click the link below to set a new password:\n"
+                + resetUrl + "\n\n"
+                + "This link is valid for a limited time. If you did not request a password reset, please ignore this email safely.\n\n"
+                + "If you suspect any unauthorized activity or compromise on your account, please contact us immediately at tranminhkhoichaua5@gmail.com.\n\n"
+                + "Best regards,\n"
+                + "Cloud E-Wallet Security Team";
+
+        send(email, subject, body);
     }
 
     private void send(String recipient, String subject, String body) {
