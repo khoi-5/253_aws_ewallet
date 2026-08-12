@@ -122,3 +122,29 @@ jobs:
           VERSION_NUMBER: ${{ steps.create-launch-template-version.outputs.version_number }}
         run: |
           echo "Created launch template version: ${VERSION_NUMBER}"
+
+      - name: Update Auto Scaling Group Launch Template version
+        env:
+          AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+          LAUNCH_TEMPLATE_ID: ${{ vars.LAUNCH_TEMPLATE_ID }}
+          NEW_VERSION: ${{ steps.create-launch-template-version.outputs.version_number }}
+        run: |
+          aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name "$AUTO_SCALING_GROUP" \
+            --launch-template "LaunchTemplateId=$LAUNCH_TEMPLATE_ID,Version=$NEW_VERSION"
+
+      - name: Verify Auto Scaling Group Launch Template version
+        env:
+          AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+          NEW_VERSION: ${{ steps.create-launch-template-version.outputs.version_number }}
+        run: |
+          actual_version="$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "$AUTO_SCALING_GROUP" \
+            --query 'AutoScalingGroups[0].LaunchTemplate.Version' \
+            --output text)"
+
+          echo "ASG references Launch Template version: ${actual_version}"
+          if [ "$actual_version" != "$NEW_VERSION" ]; then
+            echo "Expected Launch Template version ${NEW_VERSION}, but ASG references ${actual_version}." >&2
+            exit 1
+          fi
