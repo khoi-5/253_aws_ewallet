@@ -46,13 +46,37 @@ jobs:
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Check whether image already exists in ECR
+        id: ecr-image
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          if ! image_count="$(aws ecr batch-get-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$IMAGE_TAG" \
+            --query 'length(images)' \
+            --output text)"; then
+            echo "Unable to check whether image ${IMAGE_TAG} exists in ECR." >&2
+            exit 1
+          fi
+
+          if [ "$image_count" = "1" ]; then
+            echo "image_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image ${IMAGE_TAG} already exists in ECR; skipping build and push."
+          else
+            echo "image_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build Docker image
+        if: steps.ecr-image.outputs.image_exists != 'true'
         run: >-
           docker build
           --tag "${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}"
           .
 
       - name: Push Docker image to Amazon ECR
+        if: steps.ecr-image.outputs.image_exists != 'true'
         run: >-
           docker push
           "${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}"
