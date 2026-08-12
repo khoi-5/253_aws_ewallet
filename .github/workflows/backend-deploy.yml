@@ -172,3 +172,87 @@ jobs:
             echo "Expected Launch Template version ${NEW_VERSION}, but ASG references ${actual_version}." >&2
             exit 1
           fi
+
+      - name: Start EC2 Auto Scaling Instance Refresh
+        id: instance-refresh
+        env:
+          AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+        run: |
+          preferences='{"MinHealthyPercentage":0,"MaxHealthyPercentage":100,"InstanceWarmup":300,"SkipMatching":true,"AutoRollback":true}'
+          refresh_id="$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name "$AUTO_SCALING_GROUP" \
+            --preferences "$preferences" \
+            --query 'InstanceRefreshId' \
+            --output text)"
+
+          echo "instance_refresh_id=$refresh_id" >> "$GITHUB_OUTPUT"
+          echo "Started Instance Refresh: ${refresh_id}"
+
+      - name: Wait for Instance Refresh to complete
+        env:
+          AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+          INSTANCE_REFRESH_ID: ${{ steps.instance-refresh.outputs.instance_refresh_id }}
+        run: |
+          max_attempts=80
+          poll_interval=15
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            refresh="$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name "$AUTO_SCALING_GROUP" \
+              --instance-refresh-ids "$INSTANCE_REFRESH_ID" \
+              --query 'InstanceRefreshes[0].[Status,PercentageComplete]' \
+              --output text)"
+
+            status="$(awk '{print $1}' <<< "$refresh")"
+            percentage="$(awk '{print $2}' <<< "$refresh")"
+            echo "Instance Refresh status=${status}, percentageComplete=${percentage:-N/A}"
+
+            case "$status" in
+              Successful)
+                echo "Instance Refresh ${INSTANCE_REFRESH_ID} completed successfully."
+                exit 0
+                ;;
+              Failed|Cancelled|RollbackFailed|RollbackSuccessful)
+                echo "Instance Refresh ${INSTANCE_REFRESH_ID} ended with status ${status}." >&2
+                exit 1
+                ;;
+              Pending|InProgress|Cancelling|RollbackInProgress)
+                ;;
+              None|'')
+                echo "Instance Refresh ${INSTANCE_REFRESH_ID} was not found." >&2
+                exit 1
+                ;;
+              *)
+                echo "Instance Refresh ${INSTANCE_REFRESH_ID} returned unexpected status ${status}." >&2
+                exit 1
+                ;;
+            esac
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              sleep "$poll_interval"
+            fi
+          done
+
+          echo "Instance Refresh ${INSTANCE_REFRESH_ID} did not complete within 20 minutes." >&2
+          exit 1
+
+      - name: Verify healthy InService instance
+        env:
+          AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+        run: |
+          aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "$AUTO_SCALING_GROUP" \
+            --query 'AutoScalingGroups[0].Instances[*].[InstanceId,LifecycleState,HealthStatus]' \
+            --output table
+
+          healthy_count="$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names "$AUTO_SCALING_GROUP" \
+            --query "length(AutoScalingGroups[0].Instances[?LifecycleState=='InService' && HealthStatus=='Healthy'])" \
+            --output text)"
+
+          if [ "$healthy_count" -lt 1 ]; then
+            echo "No InService and Healthy instance was found in the Auto Scaling Group." >&2
+            exit 1
+          fi
+
+          echo "Verified ${healthy_count} InService and Healthy instance(s)."
