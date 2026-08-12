@@ -177,10 +177,23 @@ jobs:
         id: instance-refresh
         env:
           AUTO_SCALING_GROUP: ${{ vars.AUTO_SCALING_GROUP }}
+          LAUNCH_TEMPLATE_ID: ${{ vars.LAUNCH_TEMPLATE_ID }}
+          NEW_VERSION: ${{ steps.create-launch-template-version.outputs.version_number }}
         run: |
           preferences='{"MinHealthyPercentage":0,"MaxHealthyPercentage":100,"InstanceWarmup":300,"SkipMatching":true,"AutoRollback":true}'
+          desired_configuration="$(jq --compact-output --null-input \
+            --arg launchTemplateId "$LAUNCH_TEMPLATE_ID" \
+            --arg version "$NEW_VERSION" \
+            '{
+              LaunchTemplate: {
+                LaunchTemplateId: $launchTemplateId,
+                Version: $version
+              }
+            }')"
+
           refresh_id="$(aws autoscaling start-instance-refresh \
             --auto-scaling-group-name "$AUTO_SCALING_GROUP" \
+            --desired-configuration "$desired_configuration" \
             --preferences "$preferences" \
             --query 'InstanceRefreshId' \
             --output text)"
